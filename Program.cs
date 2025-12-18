@@ -1,18 +1,19 @@
 ﻿namespace DirectPlay_Reg
 {
-    using System;
     using Microsoft.Win32;
+    using System;
     using System.Runtime.InteropServices;
 
     class Program
     {
-        const string SERVICE_PROVIDERS_PATH = @"Software\Microsoft\DirectPlay\Service Providers";
-        const string SERVICE_PROVIDER_DEFAULT_NAME = "IPX Connection For DirectPlay";
-        const string SERVICE_PROVIDER_GUID_STRING = "{685BC400-9D2C-11cf-A9CD-00AA006886E3}";
+        /*
+         * Originally converted to C# from https://github.com/solemnwarning/ipxwrapper/blob/master/src/dplay-setup.c
+         * Adapted to support TCP
+        */
+        const string DIRECTPLAY_PATH = @"Software\Microsoft\DirectPlay";
+        const string SERVICE_PROVIDERS_PATH = DIRECTPLAY_PATH + "\\Service Providers";
         const string SERVICE_PROVIDER_PATH = "dpwsockx.dll";
-
-        const string SERVICE_KEY_PATH = @"Software\Microsoft\DirectPlay\Services\{5146ab8cb6b1ce11920c00aa006c4972}";
-        const string SERVICE_NAME = "WinSock IPX Connection For DirectPlay";
+        const string SERVICES_PATH = DIRECTPLAY_PATH + "\\Services";
         const string SERVICE_PATH = "dpwsockx.dll";
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
@@ -23,11 +24,17 @@
         const uint MB_YESNO = 0x04;
         const int IDYES = 6;
 
+        public static class global
+        {
+            public static string appName = "DirectPlay Registry Setup";
+            public static bool quiet = false;
+            public static RegistryKey hkeyServiceProviders;
+        }
+
         static void Main(string[] args)
         {
-            bool quiet = false;
             if (args.Length == 1 && args[0] == "/q") {
-                quiet = true;
+                global.quiet = true;
             }
             else if (args.Length != 0) {
                 MessageBox(IntPtr.Zero,
@@ -35,11 +42,9 @@
                     "Usage", MB_ICONINFORMATION);
                 Environment.Exit(1);
             }
-
-            RegistryKey hkeyServiceProviders;
             try {
-                hkeyServiceProviders = Registry.LocalMachine.OpenSubKey(SERVICE_PROVIDERS_PATH, writable: true);
-                if (hkeyServiceProviders == null)
+                global.hkeyServiceProviders = Registry.LocalMachine.OpenSubKey(SERVICE_PROVIDERS_PATH, writable: true);
+                if (global.hkeyServiceProviders == null)
                     throw new Exception("not found");
             }
             catch {
@@ -48,14 +53,24 @@
                     null, MB_ICONEXCLAMATION);
                 return;
             }
-            //Create function from here
-            RegistryKey hkeyIpxServiceProvider = OpenServiceProviderKey(hkeyServiceProviders, SERVICE_PROVIDER_GUID_STRING);
+
+            //Set-up registry
+            RegSetup("TCP", "Internet TCP/IP Connection For DirectPlay", "{36E95EE0-8577-11CF-960C-0080C7534E82}", "{5046ab8cb6b1ce11920c00aa006c4972}", "WinSock TCP Connection For DirectPlay", 500, 0, "dpnhpast.dll");
+            RegSetup("IPX", "IPX Connection For DirectPlay", "{685BC400-9D2C-11cf-A9CD-00AA006886E3}", "{5146ab8cb6b1ce11920c00aa006c4972}", "WinSock IPX Connection For DirectPlay", 50, 0);
+
+            global.hkeyServiceProviders?.Close();
+        }
+
+        static void RegSetup(string SERVICE_PROVIDER_SHORT_NAME, string SERVICE_PROVIDER_DEFAULT_NAME, string SERVICE_PROVIDER_GUID_STRING, string SERVICE_KEY, string SERVICE_NAME, Int32 dwReserved1, Int32 dwReserved2, string Gateway="")
+        {
+            string SERVICE_KEY_PATH = SERVICES_PATH + "\\" + SERVICE_KEY;
+            RegistryKey hkeyServiceProvider = OpenServiceProviderKey(global.hkeyServiceProviders, SERVICE_PROVIDER_GUID_STRING);
 
             bool needToAddSp = false;
             bool needToFixPath = false;
 
-            if (hkeyIpxServiceProvider != null) {
-                var pathValue = (string)hkeyIpxServiceProvider.GetValue("Path");
+            if (hkeyServiceProvider != null) {
+                var pathValue = (string)hkeyServiceProvider.GetValue("Path");
                 if (string.IsNullOrEmpty(pathValue) ||
                     !string.Equals(pathValue, SERVICE_PROVIDER_PATH, StringComparison.OrdinalIgnoreCase)) {
                     needToFixPath = true;
@@ -87,35 +102,38 @@
                 return;
             }
 
-            if (!quiet) {
+            if (!global.quiet) {
                 if (needToAddSp || needToFixPath || needToAddService || needToFixServicePath) {
                     int res = MessageBox(IntPtr.Zero,
-                        "Do you want to configure DirectPlay to enable the use of IPX?",
-                        "IPXWrapper", MB_YESNO | MB_ICONEXCLAMATION);
+                        "Do you want to configure DirectPlay to enable the use of "+SERVICE_PROVIDER_SHORT_NAME+"?",
+                        global.appName, MB_YESNO | MB_ICONEXCLAMATION);
 
                     if (res != IDYES)
                         goto DONE;
                 }
                 else {
                     MessageBox(IntPtr.Zero,
-                        "DirectPlay is already configured for IPX, nothing changed.",
-                        "IPXWrapper", MB_ICONINFORMATION);
+                        "DirectPlay is already configured for "+SERVICE_PROVIDER_SHORT_NAME+", nothing changed.",
+                        global.appName, MB_ICONINFORMATION);
                     goto DONE;
                 }
             }
 
             // Create or update service provider
             if (needToAddSp) {
-                hkeyIpxServiceProvider = hkeyServiceProviders.CreateSubKey(SERVICE_PROVIDER_DEFAULT_NAME);
-                hkeyIpxServiceProvider.SetValue("DescriptionA", SERVICE_PROVIDER_DEFAULT_NAME);
-                hkeyIpxServiceProvider.SetValue("DescriptionW", SERVICE_PROVIDER_DEFAULT_NAME);
-                hkeyIpxServiceProvider.SetValue("dwReserved1", 50, RegistryValueKind.DWord);
-                hkeyIpxServiceProvider.SetValue("dwReserved2", 0, RegistryValueKind.DWord);
-                hkeyIpxServiceProvider.SetValue("Guid", SERVICE_PROVIDER_GUID_STRING);
+                hkeyServiceProvider = global.hkeyServiceProviders.CreateSubKey(SERVICE_PROVIDER_DEFAULT_NAME);
+                hkeyServiceProvider.SetValue("DescriptionA", SERVICE_PROVIDER_DEFAULT_NAME);
+                hkeyServiceProvider.SetValue("DescriptionW", SERVICE_PROVIDER_DEFAULT_NAME);
+                hkeyServiceProvider.SetValue("dwReserved1", dwReserved1, RegistryValueKind.DWord);
+                hkeyServiceProvider.SetValue("dwReserved2", dwReserved2, RegistryValueKind.DWord);
+                hkeyServiceProvider.SetValue("Guid", SERVICE_PROVIDER_GUID_STRING);
+                if (Gateway != "") {
+                    hkeyServiceProvider.SetValue("Gateway", Gateway);
+                }
             }
 
             if (needToAddSp || needToFixPath) {
-                hkeyIpxServiceProvider.SetValue("Path", SERVICE_PROVIDER_PATH);
+                hkeyServiceProvider.SetValue("Path", SERVICE_PROVIDER_PATH);
             }
 
             // Create or update service
@@ -128,18 +146,16 @@
                 hkeyService.SetValue("Path", SERVICE_PATH);
             }
 
-            if (!quiet) {
+            if (!global.quiet) {
                 MessageBox(IntPtr.Zero,
                     "The registry was updated successfully.",
-                    "IPXWrapper", MB_ICONINFORMATION);
+                    global.appName, MB_ICONINFORMATION);
             }
 
-        DONE:
-            hkeyService?.Close();
-            hkeyIpxServiceProvider?.Close();
-            hkeyServiceProviders?.Close();
+            DONE:
+                hkeyService?.Close();
+                hkeyServiceProvider?.Close();
         }
-
         static RegistryKey OpenServiceProviderKey(RegistryKey parentKey, string guid)
         {
             foreach (var subKeyName in parentKey.GetSubKeyNames()) {
