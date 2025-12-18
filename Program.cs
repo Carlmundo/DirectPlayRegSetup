@@ -113,7 +113,7 @@
                 }
                 else {
                     MessageBox(IntPtr.Zero,
-                        "DirectPlay is already configured for "+SERVICE_PROVIDER_SHORT_NAME+", nothing changed.",
+                        "DirectPlay is already configured for "+SERVICE_PROVIDER_SHORT_NAME+".\nNo changes have been made.",
                         global.appName, MB_ICONINFORMATION);
                     goto DONE;
                 }
