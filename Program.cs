@@ -2,6 +2,7 @@
 {
     using Microsoft.Win32;
     using System;
+    using System.IO;
     using System.Runtime.InteropServices;
 
     class Program
@@ -10,7 +11,9 @@
          * Originally converted to C# from https://github.com/solemnwarning/ipxwrapper/blob/master/src/dplay-setup.c
          * Adapted to support TCP
         */
+        const string ERROR_REG_ACCESS = "Error accessing registry: ";
         const string DIRECTPLAY_PATH = @"Software\Microsoft\DirectPlay";
+        const string PATH_STRING = "Path";
         const string SERVICE_PROVIDERS_PATH = DIRECTPLAY_PATH + "\\Service Providers";
         const string SERVICE_PROVIDER_PATH = "dpwsockx.dll";
         const string SERVICES_PATH = DIRECTPLAY_PATH + "\\Services";
@@ -44,8 +47,9 @@
             }
             try {
                 global.hkeyServiceProviders = Registry.LocalMachine.OpenSubKey(SERVICE_PROVIDERS_PATH, writable: true);
-                if (global.hkeyServiceProviders == null)
-                    throw new Exception("not found");
+                if (global.hkeyServiceProviders == null) {
+                    throw new Exception();
+                }
             }
             catch {
                 MessageBox(IntPtr.Zero,
@@ -70,10 +74,17 @@
             bool needToFixPath = false;
 
             if (hkeyServiceProvider != null) {
-                var pathValue = (string)hkeyServiceProvider.GetValue("Path");
+                string pathValue = (string)hkeyServiceProvider.GetValue(PATH_STRING);
                 if (string.IsNullOrEmpty(pathValue) ||
-                    !string.Equals(pathValue, SERVICE_PROVIDER_PATH, StringComparison.OrdinalIgnoreCase)) {
+                    !string.Equals(pathValue, SERVICE_PROVIDER_PATH, StringComparison.OrdinalIgnoreCase)
+                    ) {
                     needToFixPath = true;
+                }
+                else {
+                    RegistryValueKind pathKind = hkeyServiceProvider.GetValueKind(PATH_STRING);
+                    if (pathKind != RegistryValueKind.String) {
+                        needToFixPath = true;
+                    }
                 }
             }
             else {
@@ -90,16 +101,28 @@
                     needToAddService = true;
                 }
                 else {
-                    var svcPathValue = (string)hkeyService.GetValue("Path");
+                    string svcPathValue = (string)hkeyService.GetValue(PATH_STRING);
                     if (string.IsNullOrEmpty(svcPathValue) ||
-                        !string.Equals(svcPathValue, SERVICE_PATH, StringComparison.OrdinalIgnoreCase)) {
+                        !string.Equals(svcPathValue, SERVICE_PATH, StringComparison.OrdinalIgnoreCase)
+                        ) {
                         needToFixServicePath = true;
+                    }
+                    else{
+                        RegistryValueKind svcPathKind = hkeyService.GetValueKind(PATH_STRING);
+                        if (svcPathKind != RegistryValueKind.ExpandString) {
+                            needToFixServicePath = true;
+                        }
                     }
                 }
             }
-            catch {
-                MessageBox(IntPtr.Zero, "Error accessing registry.", null, MB_ICONEXCLAMATION);
-                return;
+            catch(Exception e) {
+                if (e.GetType() == typeof(IOException)) {
+                    needToAddService = true;
+                }
+                else {
+                    MessageBox(IntPtr.Zero, ERROR_REG_ACCESS + e.Message, null, MB_ICONEXCLAMATION);
+                    return;
+                }
             }
 
             if (!global.quiet) {
@@ -118,33 +141,37 @@
                     goto DONE;
                 }
             }
+            
+            try {
+                // Create or update service provider
+                if (needToAddSp) {
+                    hkeyServiceProvider = global.hkeyServiceProviders.CreateSubKey(SERVICE_PROVIDER_DEFAULT_NAME);
+                    hkeyServiceProvider.SetValue("DescriptionA", SERVICE_PROVIDER_DEFAULT_NAME);
+                    hkeyServiceProvider.SetValue("DescriptionW", SERVICE_PROVIDER_DEFAULT_NAME);
+                    hkeyServiceProvider.SetValue("dwReserved1", dwReserved1, RegistryValueKind.DWord);
+                    hkeyServiceProvider.SetValue("dwReserved2", dwReserved2, RegistryValueKind.DWord);
+                    hkeyServiceProvider.SetValue("Guid", SERVICE_PROVIDER_GUID_STRING);
+                    if (Gateway != "") {
+                        hkeyServiceProvider.SetValue("Gateway", Gateway);
+                    }
+                }
+                if (needToAddSp || needToFixPath) {
+                    hkeyServiceProvider.SetValue("Path", SERVICE_PROVIDER_PATH);
+                }
+                // Create or update service
+                if (needToAddService) {
+                    hkeyService = Registry.LocalMachine.CreateSubKey(SERVICE_KEY_PATH);
+                    hkeyService.SetValue("Description", SERVICE_NAME);
+                }
 
-            // Create or update service provider
-            if (needToAddSp) {
-                hkeyServiceProvider = global.hkeyServiceProviders.CreateSubKey(SERVICE_PROVIDER_DEFAULT_NAME);
-                hkeyServiceProvider.SetValue("DescriptionA", SERVICE_PROVIDER_DEFAULT_NAME);
-                hkeyServiceProvider.SetValue("DescriptionW", SERVICE_PROVIDER_DEFAULT_NAME);
-                hkeyServiceProvider.SetValue("dwReserved1", dwReserved1, RegistryValueKind.DWord);
-                hkeyServiceProvider.SetValue("dwReserved2", dwReserved2, RegistryValueKind.DWord);
-                hkeyServiceProvider.SetValue("Guid", SERVICE_PROVIDER_GUID_STRING);
-                if (Gateway != "") {
-                    hkeyServiceProvider.SetValue("Gateway", Gateway);
+                if (needToAddService || needToFixServicePath) {
+                    hkeyService.SetValue("Path", SERVICE_PATH, RegistryValueKind.ExpandString);
                 }
             }
-
-            if (needToAddSp || needToFixPath) {
-                hkeyServiceProvider.SetValue("Path", SERVICE_PROVIDER_PATH);
-            }
-
-            // Create or update service
-            if (needToAddService) {
-                hkeyService = Registry.LocalMachine.CreateSubKey(SERVICE_KEY_PATH);
-                hkeyService.SetValue("Description", SERVICE_NAME);
-            }
-
-            if (needToAddService || needToFixServicePath) {
-                hkeyService.SetValue("Path", SERVICE_PATH);
-            }
+            catch (Exception e) {
+                MessageBox(IntPtr.Zero, ERROR_REG_ACCESS + e.Message, null, MB_ICONEXCLAMATION);
+                return;
+            }      
 
             if (!global.quiet) {
                 MessageBox(IntPtr.Zero,
