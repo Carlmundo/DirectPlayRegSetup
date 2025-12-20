@@ -185,12 +185,16 @@
         }
         static RegistryKey OpenServiceProviderKey(RegistryKey parentKey, string guid)
         {
+            string strGuid = "Guid";
             foreach (var subKeyName in parentKey.GetSubKeyNames()) {
                 try {
                     var subKey = parentKey.OpenSubKey(subKeyName, writable: true);
-                    var existingGuid = (string)subKey.GetValue("Guid");
+                    var existingGuid = (string)subKey.GetValue(strGuid);
                     if (string.Equals(existingGuid, guid, StringComparison.OrdinalIgnoreCase)) {
-                        return subKey;
+                        RegistryValueKind subKeyKind = subKey.GetValueKind(strGuid);
+                        if (subKeyKind == RegistryValueKind.String) {
+                            return subKey;
+                        }       
                     }
                     subKey.Close();
                 }
