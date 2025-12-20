@@ -36,7 +36,7 @@
 
         static void Main(string[] args)
         {
-            if (args.Length == 1 && args[0] == "/q") {
+            if (args.Length >= 1 && args[0] == "/q") {
                 global.quiet = true;
             }
             else if (args.Length != 0) {
@@ -48,13 +48,18 @@
             try {
                 global.hkeyServiceProviders = Registry.LocalMachine.OpenSubKey(SERVICE_PROVIDERS_PATH, writable: true);
                 if (global.hkeyServiceProviders == null) {
-                    throw new Exception();
+                    throw new Exception("NOT_FOUND");
                 }
-            }
-            catch {
-                MessageBox(IntPtr.Zero,
-                    "Service Providers key not found in registry.\nPlease check DirectX is installed/DirectPlay is enabled.",
-                    null, MB_ICONEXCLAMATION);
+            }       
+            catch (Exception e) {
+                if (e.Message == "NOT_FOUND") {
+                    MessageBox(IntPtr.Zero,
+                        "Service Providers key not found in registry.\nPlease check DirectX is installed/DirectPlay is enabled.",
+                        null, MB_ICONEXCLAMATION);
+                }
+                else {
+                    MessageBox(IntPtr.Zero, ERROR_REG_ACCESS + e.Message, null, MB_ICONEXCLAMATION);
+                }
                 return;
             }
 
@@ -198,7 +203,7 @@
                     }
                     subKey.Close();
                 }
-                catch { }
+                catch {}
             }
             return null;
         }
