@@ -79,17 +79,22 @@
             bool needToFixPath = false;
 
             if (hkeyServiceProvider != null) {
-                string pathValue = (string)hkeyServiceProvider.GetValue(PATH_STRING);
-                if (string.IsNullOrEmpty(pathValue) ||
+                try {
+                    string pathValue = (string)hkeyServiceProvider.GetValue(PATH_STRING);
+                    if (string.IsNullOrEmpty(pathValue) ||
                     !string.Equals(pathValue, SERVICE_PROVIDER_PATH, StringComparison.OrdinalIgnoreCase)
                     ) {
-                    needToFixPath = true;
-                }
-                else {
-                    RegistryValueKind pathKind = hkeyServiceProvider.GetValueKind(PATH_STRING);
-                    if (pathKind != RegistryValueKind.String) {
                         needToFixPath = true;
                     }
+                    else {
+                        RegistryValueKind pathKind = hkeyServiceProvider.GetValueKind(PATH_STRING);
+                        if (pathKind != RegistryValueKind.String) {
+                            needToFixPath = true;
+                        }
+                    }
+                }
+                catch {
+                    needToAddSp = true;
                 }
             }
             else {
@@ -120,14 +125,8 @@
                     }
                 }
             }
-            catch(Exception e) {
-                if (e.GetType() == typeof(IOException)) {
-                    needToAddService = true;
-                }
-                else {
-                    MessageBox(IntPtr.Zero, ERROR_REG_ACCESS + e.Message, null, MB_ICONEXCLAMATION);
-                    return;
-                }
+            catch {
+                needToAddService = true;
             }
 
             if (!global.quiet) {
