@@ -2,7 +2,6 @@
 {
     using Microsoft.Win32;
     using System;
-    using System.IO;
     using System.Runtime.InteropServices;
 
     class Program
@@ -55,10 +54,10 @@
                 if (e.Message == "NOT_FOUND") {
                     MessageBox(IntPtr.Zero,
                         "Service Providers key not found in registry.\nPlease check DirectX is installed/DirectPlay is enabled.",
-                        null, MB_ICONEXCLAMATION);
+                        global.appName, MB_ICONEXCLAMATION);
                 }
                 else {
-                    MessageBox(IntPtr.Zero, ERROR_REG_ACCESS + e.Message, null, MB_ICONEXCLAMATION);
+                    MessageBox(IntPtr.Zero, ERROR_REG_ACCESS + e.Message, global.appName, MB_ICONEXCLAMATION);
                 }
                 return;
             }
@@ -173,7 +172,7 @@
                 }
             }
             catch (Exception e) {
-                MessageBox(IntPtr.Zero, ERROR_REG_ACCESS + e.Message, null, MB_ICONEXCLAMATION);
+                MessageBox(IntPtr.Zero, ERROR_REG_ACCESS + e.Message, global.appName, MB_ICONEXCLAMATION);
                 return;
             }      
 
